@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>기타 연주 수행평가 시스템</title>
+  <style>
+    body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; padding: 20px; display: flex; gap: 20px; }
+    .video-section { flex: 2; background: #1e1e1e; padding: 20px; border-radius: 12px; }
+    .eval-section { flex: 1; background: #1e1e1e; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; }
+    iframe { width: 100%; height: 400px; border: none; border-radius: 8px; }
+    .score-card { background: #2a2a2a; padding: 15px; border-radius: 8px; margin-top: 15px; text-align: center; }
+    .score-num { font-size: 36px; font-weight: bold; color: #00ffcc; }
+    .pass-badge { font-size: 20px; font-weight: bold; margin-top: 10px; padding: 8px; border-radius: 6px; }
+    .pass { background: #2e7d32; color: #fff; }
+    .fail { background: #c62828; color: #fff; }
+    button { background: #00ffcc; color: #000; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 15px; }
+    .measure-list { max-height: 250px; overflow-y: auto; margin-top: 15px; font-size: 14px; background: #121212; padding: 10px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+
+  <div class="video-section">
+    <h2>기타 연주 수행평가 (1분 5초 구간)</h2>
+    <!-- 유튜브 링크의 'v=' 뒤에 나오는 영상 ID로 바꿔주세요 -->
+    <iframe id="evalVideo" src="https://www.youtube.com/embed/AzIJxHo1MEM&list=RDAzIJxHo1MEM&start_radio=1?enablejsapi=1" allowfullscreen></iframe>
+  </div>
+
+  <div class="eval-section">
+    <h2>채점 결과판</h2>
+    <p>총 26마디 / 만점 30점 (Pass 기준: 24점 이상)</p>
+    
+    <button onclick="startDemoEvaluation()">채점 실행하기</button>
+
+    <div class="score-card">
+      <div>최종 점수</div>
+      <div class="score-num"><span id="totalScore">0.0</span> / 30.0</div>
+      <div id="passBadge" class="pass-badge" style="display:none;"></div>
+    </div>
+
+    <h4>마디별 상세 점수</h4>
+    <div id="measureList" class="measure-list">
+      버튼을 누르면 채점이 진행됩니다.
+    </div>
+  </div>
+
+  <script>
+    async function startDemoEvaluation() {
+      const mockAccuracies = Array.from({length: 26}, () => Math.floor(Math.random() * 30) + 75);
+
+      const response = await fetch('/api/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accuracies: mockAccuracies })
+      });
+
+      const result = await response.json();
+      
+      document.getElementById('totalScore').innerText = result.total_score;
+      const badge = document.getElementById('passBadge');
+      badge.style.display = 'block';
+      
+      if (result.is_pass) {
+        badge.innerText = "PASS (통과)";
+        badge.className = "pass-badge pass";
+      } else {
+        badge.innerText = "FAIL (재도전)";
+        badge.className = "pass-badge fail";
+      }
+
+      let html = '';
+      result.measures.forEach(m => {
+        html += `<div>${m.measure}마디 (배점 ${m.weight}점): ${m.accuracy}% -> <b>${m.score}점</b></div>`;
+      });
+      document.getElementById('measureList').innerHTML = html;
+    }
+  </script>
+</body>
+</html>
