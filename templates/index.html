@@ -22,8 +22,11 @@
   <div class="video-section">
     <h2>기타 연주 수행평가 (1분 5초 구간)</h2>
     <!-- 유튜브 링크의 'v=' 뒤에 나오는 영상 ID로 바꿔주세요 -->
-    <iframe id="evalVideo" src="https://www.youtube.com/embed/AzIJxHo1MEM&list=RDAzIJxHo1MEM&start_radio=1?enablejsapi=1" allowfullscreen></iframe>
-  </div>
+    <!-- 기존 iframe 태그 삭제 후 아래 태그로 교체 -->
+<video controls width="100%" height="auto" style="border-radius: 8px;">
+  <source src="{{ url_for('static', filename='sample.mp4') }}" type="video/mp4">
+  브라우저가 비디오 태그를 지원하지 않습니다.
+</video>
 
   <div class="eval-section">
     <h2>채점 결과판</h2>
