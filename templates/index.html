@@ -12,28 +12,23 @@
 
         .container { display: flex; flex: 1; gap: 20px; max-width: 1400px; width: 100%; margin: 0 auto; }
         
-        /* 왼쪽: 비디오 화면 */
         .left-panel { flex: 6; background: #1e1e1e; border-radius: 12px; padding: 15px; display: flex; flex-direction: column; position: relative; }
         .video-wrapper { position: relative; width: 100%; height: 100%; min-height: 400px; background: #000; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
         video { width: 100%; height: 100%; object-fit: contain; }
 
-        /* 카운트다운 오버레이 */
         .countdown-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; font-size: 8rem; font-weight: bold; color: #00ffcc; z-index: 10; }
 
-        /* 오른쪽: 채점판 */
         .right-panel { flex: 4; background: #1e1e1e; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; }
         .score-board { background: #2a2a2a; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 15px; }
         .score-title { font-size: 1.1rem; color: #bbb; margin-bottom: 10px; }
         .score-value { font-size: 3.5rem; font-weight: bold; color: #00ffcc; }
         .pass-status { font-size: 1.2rem; margin-top: 10px; font-weight: bold; }
         
-        /* 실시간 상태 정보 */
         .realtime-info { background: #252525; padding: 15px; border-radius: 8px; flex: 1; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
         .metric-box { display: flex; justify-content: space-between; align-items: center; font-size: 1.1rem; }
         .accuracy-bar-container { width: 100%; background: #444; height: 15px; border-radius: 8px; overflow: hidden; margin-top: 5px; }
         .accuracy-bar { width: 0%; height: 100%; background: #ff4757; transition: width 0.1s ease, background-color 0.2s; }
 
-        /* 버튼 그룹 */
         .btn-group { display: flex; gap: 10px; }
         .btn { flex: 1; border: none; padding: 18px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s; }
         .btn-start { background: #00ffcc; color: #000; }
@@ -50,7 +45,6 @@
     </header>
 
     <div class="container">
-        <!-- 왼쪽: 연주 영상 및 카운트다운 -->
         <div class="left-panel">
             <div class="video-wrapper">
                 <video id="guitarVideo" crossorigin="anonymous">
@@ -61,7 +55,6 @@
             </div>
         </div>
 
-        <!-- 오른쪽: 실시간 채점 상황판 -->
         <div class="right-panel">
             <div class="score-board">
                 <div class="score-title">누적 획득 점수 (기본 4점 포함 / 만점 30점)</div>
@@ -78,7 +71,7 @@
                     <div id="accuracyBar" class="accuracy-bar"></div>
                 </div>
                 <p style="font-size: 0.85rem; color: #888; margin-top: 10px; text-align: center;">
-                    * 기본 4점에서 시작하며, 70% 이상 일치 시 1점씩 추가됩니다. (최대 30점)
+                    * 연주 소리가 인식되고 정확도 <b>70% 이상</b> 유지 시 1초당 1점 추가됩니다.
                 </p>
             </div>
 
@@ -108,8 +101,9 @@
         const MAX_SCORE = 30;
         let score = BASE_SCORE;
         let scoreTimer = null;
+        let currentAccuracy = 0;
 
-        const MAX_TIME = 65; // 1분 5초 (65초)
+        const MAX_TIME = 65; // 1분 5초
 
         async function startEvaluation() {
             startBtn.disabled = true;
@@ -122,7 +116,6 @@
             passStatus.innerText = "카운트다운 시작...";
             passStatus.style.color = "#00ffcc";
 
-            // 마이크 권한 요청 및 AudioContext 초기화
             try {
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -130,12 +123,12 @@
                     
                     let micSource = audioCtx.createMediaStreamSource(micStream);
                     micAnalyser = audioCtx.createAnalyser();
-                    micAnalyser.fftSize = 256;
+                    micAnalyser.fftSize = 512;
                     micSource.connect(micAnalyser);
 
                     let videoSource = audioCtx.createMediaElementSource(video);
                     videoAnalyser = audioCtx.createAnalyser();
-                    videoAnalyser.fftSize = 256;
+                    videoAnalyser.fftSize = 512;
                     videoSource.connect(videoAnalyser);
                     videoSource.connect(audioCtx.destination);
                 }
@@ -146,7 +139,6 @@
                 return;
             }
 
-            // 3초 카운트다운 시작
             video.currentTime = 0;
             countdownOverlay.style.display = 'flex';
             let count = 3;
@@ -171,9 +163,18 @@
             isEvaluating = true;
             passStatus.innerText = "실시간 채점 진행 중...";
 
+            // 1초마다 정확도를 확인하여 70% 이상일 때만 정확히 +1점
             scoreTimer = setInterval(() => {
-                if (!isPaused && (video.currentTime >= MAX_TIME || video.ended)) {
-                    stopEvaluation();
+                if (isEvaluating && !isPaused) {
+                    if (video.currentTime >= MAX_TIME || video.ended) {
+                        stopEvaluation();
+                        return;
+                    }
+
+                    if (currentAccuracy >= 70 && score < MAX_SCORE) {
+                        score++;
+                        scoreText.innerText = `${score} / ${MAX_SCORE} 점`;
+                    }
                 }
             }, 1000);
 
@@ -213,29 +214,42 @@
             micAnalyser.getByteFrequencyData(micData);
             videoAnalyser.getByteFrequencyData(videoData);
 
-            let diffSum = 0;
-            let total = micData.length;
-            for (let i = 0; i < total; i++) {
-                diffSum += Math.abs(micData[i] - videoData[i]);
+            // 1. 마이크 입력 음량(에너지) 계산 (소리가 안 들리면 0 처리)
+            let micVolume = 0;
+            for (let i = 0; i < micData.length; i++) {
+                micVolume += micData[i];
             }
-            
-            let avgDiff = diffSum / total;
-            let matchPercentage = Math.max(0, Math.min(100, Math.round(100 - (avgDiff / 255) * 100 * 2)));
+            micVolume = micVolume / micData.length;
 
-            accuracyText.innerText = matchPercentage + "%";
-            accuracyBar.style.width = matchPercentage + "%";
+            // 소리가 너무 작으면(무음 상태) 일치도를 0%로 고정
+            if (micVolume < 15) {
+                currentAccuracy = 0;
+            } else {
+                // 2. 주파수 일치율 정밀 계산
+                let correlation = 0;
+                let micSum = 0, videoSum = 0;
 
-            if (matchPercentage >= 70) {
+                for (let i = 0; i < micData.length; i++) {
+                    correlation += micData[i] * videoData[i];
+                    micSum += micData[i] * micData[i];
+                    videoSum += videoData[i] * videoData[i];
+                }
+
+                let norm = Math.sqrt(micSum * videoSum);
+                if (norm === 0) {
+                    currentAccuracy = 0;
+                } else {
+                    currentAccuracy = Math.round((correlation / norm) * 100);
+                }
+            }
+
+            // 화면 UI 반영
+            accuracyText.innerText = currentAccuracy + "%";
+            accuracyBar.style.width = currentAccuracy + "%";
+
+            if (currentAccuracy >= 70) {
                 accuracyBar.style.backgroundColor = "#00ffcc";
                 accuracyText.style.color = "#00ffcc";
-                
-                if (!window.lastPointTime || Date.now() - window.lastPointTime >= 1000) {
-                    if (score < MAX_SCORE) {
-                        score++;
-                        scoreText.innerText = `${score} / ${MAX_SCORE} 점`;
-                    }
-                    window.lastPointTime = Date.now();
-                }
             } else {
                 accuracyBar.style.backgroundColor = "#ff4757";
                 accuracyText.style.color = "#ff4757";
