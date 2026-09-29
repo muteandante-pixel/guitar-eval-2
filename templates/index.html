@@ -64,14 +64,14 @@
 
             <div class="realtime-info">
                 <div class="metric-box">
-                    <span>실시간 음향 일치도</span>
+                    <span>실시간 연주 일치도</span>
                     <span id="accuracyText" style="font-weight: bold; color: #ff4757;">0%</span>
                 </div>
                 <div class="accuracy-bar-container">
                     <div id="accuracyBar" class="accuracy-bar"></div>
                 </div>
                 <p style="font-size: 0.85rem; color: #888; margin-top: 10px; text-align: center;">
-                    * 연주 소리가 인식되고 정확도 <b>70% 이상</b> 유지 시 1초당 1점 추가됩니다.
+                    * 💡 <b>Tip:</b> 이어폰/헤드폰을 착용하고 연주하시면 채점이 훨씬 정확해집니다!
                 </p>
             </div>
 
@@ -119,7 +119,15 @@
             try {
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    
+                    // 마이크 노이즈 캔슬링 및 에코 방지 옵션 적용
+                    micStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
+                    });
                     
                     let micSource = audioCtx.createMediaStreamSource(micStream);
                     micAnalyser = audioCtx.createAnalyser();
@@ -163,7 +171,6 @@
             isEvaluating = true;
             passStatus.innerText = "실시간 채점 진행 중...";
 
-            // 1초마다 정확도를 확인하여 70% 이상일 때만 정확히 +1점
             scoreTimer = setInterval(() => {
                 if (isEvaluating && !isPaused) {
                     if (video.currentTime >= MAX_TIME || video.ended) {
@@ -214,36 +221,40 @@
             micAnalyser.getByteFrequencyData(micData);
             videoAnalyser.getByteFrequencyData(videoData);
 
-            // 1. 마이크 입력 음량(에너지) 계산 (소리가 안 들리면 0 처리)
-            let micVolume = 0;
+            // 마이크 볼륨 계산
+            let micSum = 0;
             for (let i = 0; i < micData.length; i++) {
-                micVolume += micData[i];
+                micSum += micData[i];
             }
-            micVolume = micVolume / micData.length;
+            let micVolume = micSum / micData.length;
 
-            // 소리가 너무 작으면(무음 상태) 일치도를 0%로 고정
-            if (micVolume < 15) {
+            // 마이크 소리가 유의미한 크기(연주 소리) 이상일 때 평가
+            if (micVolume < 8) {
                 currentAccuracy = 0;
             } else {
-                // 2. 주파수 일치율 정밀 계산
-                let correlation = 0;
-                let micSum = 0, videoSum = 0;
+                // 음의 에너지 피크 구간 비교 알고리즘
+                let matches = 0;
+                let activeBins = 0;
 
-                for (let i = 0; i < micData.length; i++) {
-                    correlation += micData[i] * videoData[i];
-                    micSum += micData[i] * micData[i];
-                    videoSum += videoData[i] * videoData[i];
+                for (let i = 2; i < micData.length - 2; i++) {
+                    // 비디오 소리에서 강한 에너지 구간 감지
+                    if (videoData[i] > 30) {
+                        activeBins++;
+                        // 마이크 입력과 주파수 에너지 유무 비교
+                        let diff = Math.abs(micData[i] - videoData[i]);
+                        if (diff < 40) {
+                            matches++;
+                        }
+                    }
                 }
 
-                let norm = Math.sqrt(micSum * videoSum);
-                if (norm === 0) {
-                    currentAccuracy = 0;
+                if (activeBins > 0) {
+                    currentAccuracy = Math.min(100, Math.round((matches / activeBins) * 120));
                 } else {
-                    currentAccuracy = Math.round((correlation / norm) * 100);
+                    currentAccuracy = 50; // 동영상 무음 구간 처리
                 }
             }
 
-            // 화면 UI 반영
             accuracyText.innerText = currentAccuracy + "%";
             accuracyBar.style.width = currentAccuracy + "%";
 
