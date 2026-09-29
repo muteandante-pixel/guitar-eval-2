@@ -1,81 +1,219 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>기타 연주 수행평가 시스템</title>
-  <style>
-    body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; padding: 20px; display: flex; gap: 20px; }
-    .video-section { flex: 2; background: #1e1e1e; padding: 20px; border-radius: 12px; }
-    .eval-section { flex: 1; background: #1e1e1e; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; }
-    iframe { width: 100%; height: 400px; border: none; border-radius: 8px; }
-    .score-card { background: #2a2a2a; padding: 15px; border-radius: 8px; margin-top: 15px; text-align: center; }
-    .score-num { font-size: 36px; font-weight: bold; color: #00ffcc; }
-    .pass-badge { font-size: 20px; font-weight: bold; margin-top: 10px; padding: 8px; border-radius: 6px; }
-    .pass { background: #2e7d32; color: #fff; }
-    .fail { background: #c62828; color: #fff; }
-    button { background: #00ffcc; color: #000; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 15px; }
-    .measure-list { max-height: 250px; overflow-y: auto; margin-top: 15px; font-size: 14px; background: #121212; padding: 10px; border-radius: 6px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사랑하게 될 거야 - 실시간 기타 연주 평가</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: #121212; color: #ffffff; font-family: 'Pretendard', sans-serif; display: flex; flex-direction: column; height: 100vh; padding: 20px; }
+        header { text-align: center; margin-bottom: 20px; }
+        header h1 { font-size: 1.8rem; color: #00ffcc; }
+
+        .container { display: flex; flex: 1; gap: 20px; max-width: 1400px; width: 100%; margin: 0 auto; }
+        
+        /* 왼쪽: 비디오 화면 */
+        .left-panel { flex: 6; background: #1e1e1e; border-radius: 12px; padding: 15px; display: flex; flex-direction: column; position: relative; }
+        .video-wrapper { position: relative; width: 100%; height: 100%; min-height: 400px; background: #000; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        video { width: 100%; height: 100%; object-fit: contain; }
+
+        /* 카운트다운 오버레이 */
+        .countdown-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; font-size: 8rem; font-weight: bold; color: #00ffcc; z-index: 10; }
+
+        /* 오른쪽: 채점판 */
+        .right-panel { flex: 4; background: #1e1e1e; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; }
+        .score-board { background: #2a2a2a; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 15px; }
+        .score-title { font-size: 1.1rem; color: #bbb; margin-bottom: 10px; }
+        .score-value { font-size: 3.5rem; font-weight: bold; color: #00ffcc; }
+        .pass-status { font-size: 1.2rem; margin-top: 10px; font-weight: bold; }
+        
+        /* 실시간 상태 정보 */
+        .realtime-info { background: #252525; padding: 15px; border-radius: 8px; flex: 1; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
+        .metric-box { display: flex; justify-content: space-between; align-items: center; font-size: 1.1rem; }
+        .accuracy-bar-container { width: 100%; background: #444; height: 15px; border-radius: 8px; overflow: hidden; margin-top: 5px; }
+        .accuracy-bar { width: 0%; height: 100%; background: #ff4757; transition: width 0.1s ease, background-color 0.2s; }
+
+        /* 버튼 */
+        .btn-start { background: #00ffcc; color: #000; border: none; padding: 18px; font-size: 1.3rem; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .btn-start:hover { background: #00dda9; }
+        .btn-start:disabled { background: #555; color: #888; cursor: not-allowed; }
+    </style>
 </head>
 <body>
 
-  <div class="video-section">
-    <h2>기타 연주 수행평가 (1분 5초 구간)</h2>
-    <!-- 유튜브 링크의 'v=' 뒤에 나오는 영상 ID로 바꿔주세요 -->
-    <!-- 기존 iframe 태그 삭제 후 아래 태그로 교체 -->
-<video controls width="100%" height="auto" style="border-radius: 8px;">
-  <source src="{{ url_for('static', filename='sample.mp4') }}" type="video/mp4">
-  브라우저가 비디오 태그를 지원하지 않습니다.
-</video>
+    <header>
+        <h1>🎸 「사랑하게 될 거야」 실시간 기타 연주 평가 System</h1>
+    </header>
 
-  <div class="eval-section">
-    <h2>채점 결과판</h2>
-    <p>총 26마디 / 만점 30점 (Pass 기준: 24점 이상)</p>
-    
-    <button onclick="startDemoEvaluation()">채점 실행하기</button>
+    <div class="container">
+        <!-- 왼쪽: 연주 영상 및 카운트다운 -->
+        <div class="left-panel">
+            <div class="video-wrapper">
+                <video id="guitarVideo" crossorigin="anonymous">
+                    <source src="{{ url_for('static', filename='guitar.mp4') }}" type="video/mp4">
+                    브라우저가 비디오 태그를 지원하지 않습니다.
+                </video>
+                <div id="countdown" class="countdown-overlay">3</div>
+            </div>
+        </div>
 
-    <div class="score-card">
-      <div>최종 점수</div>
-      <div class="score-num"><span id="totalScore">0.0</span> / 30.0</div>
-      <div id="passBadge" class="pass-badge" style="display:none;"></div>
+        <!-- 오른쪽: 실시간 채점 상황판 -->
+        <div class="right-panel">
+            <div class="score-board">
+                <div class="score-title">누적 획득 점수 (구간: ~1분 05초)</div>
+                <div id="scoreText" class="score-value">0 점</div>
+                <div id="passStatus" class="pass-status" style="color: #aaa;">연주 대기 중</div>
+            </div>
+
+            <div class="realtime-info">
+                <div class="metric-box">
+                    <span>실시간 음향 일치도</span>
+                    <span id="accuracyText" style="font-weight: bold; color: #ff4757;">0%</span>
+                </div>
+                <div class="accuracy-bar-container">
+                    <div id="accuracyBar" class="accuracy-bar"></div>
+                </div>
+                <p style="font-size: 0.85rem; color: #888; margin-top: 10px; text-align: center;">
+                    * 매 초마다 정확도 <b>70% 이상</b> 유지 시 1점씩 적립됩니다.
+                </p>
+            </div>
+
+            <button id="startBtn" class="btn-start" onclick="startEvaluation()">시작하기 (카운트다운)</button>
+        </div>
     </div>
 
-    <h4>마디별 상세 점수</h4>
-    <div id="measureList" class="measure-list">
-      버튼을 누르면 채점이 진행됩니다.
-    </div>
-  </div>
+    <script>
+        let video = document.getElementById('guitarVideo');
+        let countdownOverlay = document.getElementById('countdown');
+        let startBtn = document.getElementById('startBtn');
+        let scoreText = document.getElementById('scoreText');
+        let accuracyText = document.getElementById('accuracyText');
+        let accuracyBar = document.getElementById('accuracyBar');
+        let passStatus = document.getElementById('passStatus');
 
-  <script>
-    async function startDemoEvaluation() {
-      const mockAccuracies = Array.from({length: 26}, () => Math.floor(Math.random() * 30) + 75);
+        let audioCtx, micStream, micAnalyser, videoAnalyser;
+        let isEvaluating = false;
+        let score = 0;
+        let scoreTimer = null;
 
-      const response = await fetch('/api/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accuracies: mockAccuracies })
-      });
+        const MAX_TIME = 65; // 1분 5초 (65초)
 
-      const result = await response.json();
-      
-      document.getElementById('totalScore').innerText = result.total_score;
-      const badge = document.getElementById('passBadge');
-      badge.style.display = 'block';
-      
-      if (result.is_pass) {
-        badge.innerText = "PASS (통과)";
-        badge.className = "pass-badge pass";
-      } else {
-        badge.innerText = "FAIL (재도전)";
-        badge.className = "pass-badge fail";
-      }
+        async function startEvaluation() {
+            startBtn.disabled = true;
+            score = 0;
+            scoreText.innerText = "0 점";
+            passStatus.innerText = "카운트다운 시작...";
+            passStatus.style.color = "#00ffcc";
 
-      let html = '';
-      result.measures.forEach(m => {
-        html += `<div>${m.measure}마디 (배점 ${m.weight}점): ${m.accuracy}% -> <b>${m.score}점</b></div>`;
-      });
-      document.getElementById('measureList').innerHTML = html;
-    }
-  </script>
+            // 마이크 권한 요청 및 AudioContext 초기화
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                let micSource = audioCtx.createMediaStreamSource(micStream);
+                micAnalyser = audioCtx.createAnalyser();
+                micAnalyser.fftSize = 256;
+                micSource.connect(micAnalyser);
+
+                let videoSource = audioCtx.createMediaElementSource(video);
+                videoAnalyser = audioCtx.createAnalyser();
+                videoAnalyser.fftSize = 256;
+                videoSource.connect(videoAnalyser);
+                videoSource.connect(audioCtx.destination);
+            } catch (e) {
+                alert("마이크 접근 권한이 필요하거나 오디오 설정에 실패했습니다.");
+                startBtn.disabled = false;
+                return;
+            }
+
+            // 3초 카운트다운 시작
+            video.currentTime = 0;
+            countdownOverlay.style.display = 'flex';
+            let count = 3;
+            countdownOverlay.innerText = count;
+
+            let timer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownOverlay.innerText = count;
+                } else {
+                    clearInterval(timer);
+                    countdownOverlay.style.display = 'none';
+                    runVideoAndEval();
+                }
+            }, 1000);
+        }
+
+        function runVideoAndEval() {
+            video.play();
+            isEvaluating = true;
+            passStatus.innerText = "실시간 채점 진행 중...";
+
+            // 1초 단위 점수 계산 루프
+            scoreTimer = setInterval(() => {
+                if (video.currentTime >= MAX_TIME || video.ended) {
+                    stopEvaluation();
+                }
+            }, 1000);
+
+            requestAnimationFrame(analyzeAudio);
+        }
+
+        function analyzeAudio() {
+            if (!isEvaluating) return;
+
+            let micData = new Uint8Array(micAnalyser.frequencyBinCount);
+            let videoData = new Uint8Array(videoAnalyser.frequencyBinCount);
+
+            micAnalyser.getByteFrequencyData(micData);
+            videoAnalyser.getByteFrequencyData(videoData);
+
+            // 주파수 파형 매칭률(정확도) 계산
+            let diffSum = 0;
+            let total = micData.length;
+            for (let i = 0; i < total; i++) {
+                diffSum += Math.abs(micData[i] - videoData[i]);
+            }
+            
+            // 0~100% 변환
+            let avgDiff = diffSum / total;
+            let matchPercentage = Math.max(0, Math.min(100, Math.round(100 - (avgDiff / 255) * 100 * 2)));
+
+            // GUI 업데이트
+            accuracyText.innerText = matchPercentage + "%";
+            accuracyBar.style.width = matchPercentage + "%";
+
+            if (matchPercentage >= 70) {
+                accuracyBar.style.backgroundColor = "#00ffcc";
+                accuracyText.style.color = "#00ffcc";
+                
+                // 프레임 단위 누적 계산으로 70% 초과 유지 시 1초마다 1점 추가
+                if (!window.lastPointTime || Date.now() - window.lastPointTime >= 1000) {
+                    score++;
+                    scoreText.innerText = score + " 점";
+                    window.lastPointTime = Date.now();
+                }
+            } else {
+                accuracyBar.style.backgroundColor = "#ff4757";
+                accuracyText.style.color = "#ff4757";
+            }
+
+            requestAnimationFrame(analyzeAudio);
+        }
+
+        function stopEvaluation() {
+            isEvaluating = false;
+            video.pause();
+            clearInterval(scoreTimer);
+
+            if (micStream) {
+                micStream.getTracks().forEach(track => track.stop());
+            }
+
+            passStatus.innerText = `채점 종료! 최종 점수: ${score}점`;
+            passStatus.style.color = "#00ffcc";
+            startBtn.disabled = false;
+        }
+    </script>
 </body>
 </html>
